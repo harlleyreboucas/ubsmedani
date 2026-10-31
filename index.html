@@ -31,6 +31,8 @@
   .p-atual .local{font-size:3.4vh;margin-top:2.5vh;color:var(--muted)}
   .p-atual .local b{color:var(--txt)}
   .p-atual.vazio .nome{font-size:5vh;color:var(--muted);font-weight:600}
+  .p-nivel{font-size:3.2vh;font-weight:800;padding:.8vh 2.4vw;border-radius:1.2vh;margin-top:2vh;text-transform:uppercase;letter-spacing:3px;color:#fff}
+  .p-hist .tagn{display:inline-block;font-size:1.6vh;font-weight:800;padding:.2vh .7vw;border-radius:.6vh;margin-right:.6vw;color:#fff;text-transform:uppercase;vertical-align:middle}
   .piscar{animation:piscar 1s ease-in-out 4}
   @keyframes piscar{0%,100%{transform:scale(1)}50%{transform:scale(1.03);box-shadow:0 0 60px rgba(255,255,255,.25)}}
   .p-hist{background:var(--card);border-radius:3vh;padding:3vh 1.5vw;display:flex;flex-direction:column;min-height:0}
@@ -147,6 +149,7 @@
   <div class="p-corpo">
     <div class="p-atual vazio" id="pAtual">
       <div class="rot">Paciente</div>
+      <div class="p-nivel hidden" id="pNivel"></div>
       <div class="nome" id="pNome">Aguardando chamadas…</div>
       <div class="setor hidden" id="pSetor"></div>
       <div class="local hidden" id="pLocal"></div>
@@ -317,6 +320,8 @@ const NIVEIS = [
   { id:'prioritario', nome:'Prioritário', cor:'#f59e0b' },
   { id:'normal',      nome:'Normal',      cor:'#64748b' },
 ];
+const nivelPorId = id => NIVEIS.find(n => n.id === id) || NIVEIS.find(n => n.id === 'normal');
+const tagNivelTV = id => { const n = nivelPorId(id); return el('span', {class:'tagn', style:`background:${n.cor}`}, n.nome); };
 const pesoNivel = n => { const i = NIVEIS.findIndex(x => x.id === n); return i < 0 ? NIVEIS.length : i; };
 const ordenar = lista => [...lista].sort((a,b) => (pesoNivel(a.nivel) - pesoNivel(b.nivel)) || (new Date(a.ordem) - new Date(b.ordem)));
 const opcoesNivel = atual => NIVEIS.map(n => el('option', {value:n.id, selected: n.id === atual}, n.nome));
@@ -372,9 +377,9 @@ function atualizarStatus(){
   document.querySelectorAll('.statusTxt').forEach(s => s.textContent = txt);
 }
 async function avisarFila(){ try{ await canal.send({type:'broadcast', event:'fila', payload:{t:Date.now()}}); }catch(e){} }
-async function anunciar(nome, setor){
+async function anunciar(nome, setor, nivel = 'normal'){
   const payload = {
-    id: Date.now() + '-' + Math.random().toString(36).slice(2,6), nome, ts: Date.now(),
+    id: Date.now() + '-' + Math.random().toString(36).slice(2,6), nome, nivel: nivel || 'normal', ts: Date.now(),
     setorId: setor.id, setorNome: setor.nome, local: setor.local, fala: setor.fala, cor: setor.cor
   };
   const r = await canal.send({type:'broadcast', event:'chamada', payload});
@@ -450,7 +455,7 @@ function iniciarPainel(){
     $('pHist').replaceChildren(...hist.itens.slice(0, CONFIG.HISTORICO_TV).map(c =>
       el('li', {style:`border-left-color:${c.cor}`},
         el('div', {class:'n'}, c.nome),
-        el('div', {class:'s'}, `${c.setorNome} · ${hora(c.ts)}`))));
+        el('div', {class:'s'}, tagNivelTV(c.nivel), `${c.setorNome} · ${hora(c.ts)}`))));
   }
 
   // ---- Voz: prefere vozes neurais ("Natural"/"Online"), que soam como uma pessoa ----
@@ -529,6 +534,8 @@ function iniciarPainel(){
     card.classList.remove('vazio', 'piscar'); void card.offsetWidth; card.classList.add('piscar');
     card.style.borderColor = c.cor;
     $('pNome').textContent = c.nome;
+    const nv = nivelPorId(c.nivel);
+    $('pNivel').textContent = nv.nome; $('pNivel').style.background = nv.cor; $('pNivel').classList.remove('hidden');
     $('pSetor').textContent = c.setorNome; $('pSetor').style.background = c.cor; $('pSetor').classList.remove('hidden');
     $('pLocal').replaceChildren('Compareça: ', el('b', {}, c.local));
     $('pLocal').classList.remove('hidden');
@@ -708,7 +715,7 @@ function iniciarChamar(){
     const s = setorAtual();
     const r = await api('fila_chamar', {p_id:p.id, p_setor:s.id});
     if (!r || !r.id){ toast('Esse paciente já foi chamado por outra pessoa.', 'erro'); await carregar(); return; }
-    await anunciar(r.nome, s);
+    await anunciar(r.nome, s, r.nivel);
     avisoChamada(r.nome);
     avisarFila(); await carregar();
   });
@@ -717,7 +724,7 @@ function iniciarChamar(){
 
   $('cRechamar').onclick = () => acao(async () => {
     const a = atual(); if (!a) return;
-    await anunciar(a.nome, setorAtual());
+    await anunciar(a.nome, setorAtual(), a.nivel);
     avisoChamada(a.nome);
   });
 
@@ -746,7 +753,7 @@ function iniciarChamar(){
       const s = setorAtual();
       const novo = await api('fila_adicionar', {p_nome:nome, p_destino:s.id, p_nivel:'normal'});
       await api('fila_chamar', {p_id:novo.id, p_setor:s.id});
-      await anunciar(nome, s);
+      await anunciar(nome, s, 'normal');
       avisoChamada(nome);
       $('cManualNome').value = '';
       avisarFila(); await carregar();

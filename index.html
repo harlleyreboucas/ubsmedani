@@ -243,11 +243,13 @@ const CONFIG = {
   CODIGO_UBS: 'ubs-minha-unidade',
 
   NOME_UBS: 'UBS — José Carlos Medani',
+  // Frase falada na TV. {nome} = nome do paciente, {local} = fim da frase do setor ('fala' abaixo)
+  FRASE_VOZ: 'Atenção! Paciente: {nome}. Compareça {local}.',
   REPETIR_VOZ: 2,          // quantas vezes o nome é falado
   VELOCIDADE_VOZ: 0.9,     // 0.5 (lento) a 1.5 (rápido)
   HISTORICO_TV: 6,         // nomes mostrados em "Últimas chamadas"
 
-  // Cada linha é um setor. 'fala' é o final da frase: "Maria da Silva, dirija-se + fala".
+  // Cada linha é um setor. 'fala' completa a frase: "Compareça + fala" (ex.: compareça à sala de triagem).
   // O primeiro da lista é o destino padrão na recepção.
   // Se houver dois médicos ao mesmo tempo, crie um setor para cada consultório.
   SETORES: [
@@ -491,7 +493,7 @@ function iniciarPainel(){
     card.style.borderColor = c.cor;
     $('pNome').textContent = c.nome;
     $('pSetor').textContent = c.setorNome; $('pSetor').style.background = c.cor; $('pSetor').classList.remove('hidden');
-    $('pLocal').replaceChildren('Dirija-se: ', el('b', {}, c.local));
+    $('pLocal').replaceChildren('Compareça: ', el('b', {}, c.local));
     $('pLocal').classList.remove('hidden');
 
     if (hist.dia !== hojeStr()) hist = {dia:hojeStr(), itens:[]};
@@ -500,7 +502,7 @@ function iniciarPainel(){
 
     await campainha();
     for (let i = 0; i < CONFIG.REPETIR_VOZ; i++){
-      await falar(`${c.nome}. Por favor, dirija-se ${c.fala}.`);
+      await falar(CONFIG.FRASE_VOZ.replace('{nome}', c.nome).replace('{local}', c.fala));
       await new Promise(r => setTimeout(r, 700));
     }
     await new Promise(r => setTimeout(r, 1500));

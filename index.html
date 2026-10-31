@@ -43,6 +43,10 @@
   #iniciar{position:fixed;inset:0;background:rgba(5,10,20,.96);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;z-index:10;text-align:center;padding:20px}
   #iniciar button{font-size:28px;padding:22px 48px;border:0;border-radius:16px;background:var(--azul);color:#fff;font-weight:700;cursor:pointer}
   #iniciar p{color:var(--muted);max-width:520px;line-height:1.5}
+  .voz-box{display:flex;flex-direction:column;gap:8px;width:100%;max-width:520px;text-align:left}
+  .voz-box select{font-size:16px}
+  #iniciar .voz-box button{font-size:16px;padding:10px 16px;background:var(--card2);border:1px solid var(--borda);font-weight:600}
+  .voz-aviso{font-size:13px;color:var(--prior);min-height:1em}
 
   /* ================= TELAS DE TRABALHO ================= */
   .tela{max-width:720px;margin:0 auto;padding:20px 16px 40px}
@@ -125,6 +129,12 @@
 <!-- ============ PAINEL DA TV ============ -->
 <div id="iniciar" class="hidden">
   <h2 style="font-size:32px">Painel de Chamadas</h2>
+  <div class="voz-box">
+    <label for="selVoz">Voz do anúncio</label>
+    <select id="selVoz"></select>
+    <button id="btnTestar" type="button">🔊 Testar voz</button>
+    <div class="voz-aviso" id="vozAviso"></div>
+  </div>
   <button id="btnIniciar">▶ Iniciar painel</button>
   <p>O navegador só libera o som depois de um clique. Clique uma vez ao ligar a TV; o painel entra em tela cheia e fica pronto para falar os nomes.</p>
 </div>
@@ -245,6 +255,9 @@ const CONFIG = {
   NOME_UBS: 'UBS — José Carlos Medani',
   // Frase falada na TV. {nome} = nome do paciente, {local} = fim da frase do setor ('fala' abaixo)
   FRASE_VOZ: 'Atenção! Paciente: {nome}. Compareça {local}.',
+  // Voz preferida (parte do nome). As vozes 'Natural' do Microsoft Edge soam humanas:
+  // 'Francisca' (feminina), 'Thalita' (feminina), 'Antonio' (masculina). Deixe '' para escolher na TV.
+  VOZ_PREFERIDA: 'Francisca',
   REPETIR_VOZ: 2,          // quantas vezes o nome é falado
   VELOCIDADE_VOZ: 0.9,     // 0.5 (lento) a 1.5 (rápido)
   HISTORICO_TV: 6,         // nomes mostrados em "Últimas chamadas"
@@ -440,15 +453,32 @@ function iniciarPainel(){
         el('div', {class:'s'}, `${c.setorNome} · ${hora(c.ts)}`))));
   }
 
+  // ---- Voz: prefere vozes neurais ("Natural"/"Online"), que soam como uma pessoa ----
   let vozPt = null;
+  const pontuar = x => (/natural/i.test(x.name) ? 100 : 0) + (/online/i.test(x.name) ? 50 : 0)
+                     + (/pt[-_]BR/i.test(x.lang) ? 20 : 0) + (/google/i.test(x.name) ? 10 : 0);
   function carregarVozes(){
-    const v = speechSynthesis.getVoices();
-    vozPt = v.find(x => /pt[-_]BR/i.test(x.lang) && /google|francisca|maria|luciana|thalita/i.test(x.name))
-         || v.find(x => /pt[-_]BR/i.test(x.lang))
-         || v.find(x => /^pt/i.test(x.lang)) || null;
+    const todas = speechSynthesis.getVoices().filter(x => /^pt/i.test(x.lang))
+                                            .sort((a,b) => pontuar(b) - pontuar(a));
+    if (!todas.length) return;
+    const salva = lerLocal('ubs-voz', '');
+    const pref  = (CONFIG.VOZ_PREFERIDA || '').toLowerCase();
+    vozPt = todas.find(x => x.name === salva)
+         || (pref && todas.find(x => x.name.toLowerCase().includes(pref) && /natural|online/i.test(x.name)))
+         || (pref && todas.find(x => x.name.toLowerCase().includes(pref)))
+         || todas[0];
+    $('selVoz').replaceChildren(...todas.map(x => el('option', {value:x.name, selected: x === vozPt},
+      (/natural/i.test(x.name) ? '★ ' : '') + x.name.replace(/^Microsoft\s+/,'').replace(/\s*-\s*Portuguese.*$/,''))));
+    $('vozAviso').textContent = todas.some(x => /natural/i.test(x.name)) ? ''
+      : 'Este navegador não tem vozes naturais. Para voz humana, abra o painel no Microsoft Edge.';
   }
   carregarVozes();
   speechSynthesis.onvoiceschanged = carregarVozes;
+  $('selVoz').onchange = () => {
+    vozPt = speechSynthesis.getVoices().find(x => x.name === $('selVoz').value) || vozPt;
+    gravarLocal('ubs-voz', $('selVoz').value);
+  };
+  $('btnTestar').onclick = () => falar(CONFIG.FRASE_VOZ.replace('{nome}', 'Maria da Silva').replace('{local}', CONFIG.SETORES[0].fala));
 
   function falar(texto){
     return new Promise(fim => {

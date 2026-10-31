@@ -458,9 +458,16 @@ function iniciarPainel(){
   const pontuar = x => (/natural/i.test(x.name) ? 100 : 0) + (/online/i.test(x.name) ? 50 : 0)
                      + (/pt[-_]BR/i.test(x.lang) ? 20 : 0) + (/google/i.test(x.name) ? 10 : 0);
   function carregarVozes(){
-    const todas = speechSynthesis.getVoices().filter(x => /^pt/i.test(x.lang))
-                                            .sort((a,b) => pontuar(b) - pontuar(a));
-    if (!todas.length) return;
+    const lista = speechSynthesis.getVoices();
+    const todas = lista.filter(x => /^pt/i.test(x.lang)).sort((a,b) => pontuar(b) - pontuar(a));
+    if (!todas.length){
+      vozPt = null;
+      $('selVoz').replaceChildren(el('option', {}, lista.length ? 'Nenhuma voz em português neste navegador' : 'Nenhuma voz disponível neste navegador'));
+      $('vozAviso').textContent = navigator.brave
+        ? 'O Brave bloqueia as vozes do navegador. Abra o painel no Microsoft Edge (voz humana) ou no Google Chrome.'
+        : 'Este navegador não tem voz em português. Abra o painel no Microsoft Edge (voz humana) ou no Google Chrome.';
+      return;
+    }
     const salva = lerLocal('ubs-voz', '');
     const pref  = (CONFIG.VOZ_PREFERIDA || '').toLowerCase();
     vozPt = todas.find(x => x.name === salva)

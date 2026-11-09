@@ -276,6 +276,8 @@ const CONFIG = {
   SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRodm1ldmd3Y2Fnd3VvcHZveHVtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIwMTg4NDMsImV4cCI6MjEwNzU5NDg0M30.MNFN5fyoz9XHYmUNPU9ya8u5PdXJvY3g-maKqQB9A5c",
 
   // Identificador da unidade (pode ser simples). A senha é definida no arquivo SQL.
+  // A senha NÃO fica escrita aqui: ela vai no link, ex.: .../?modo=painel&chave=SUA-SENHA
+  // Quem abrir pelo link com a chave entra direto; sem a chave, a página pede a senha.
   CODIGO_UBS: 'ubs-minha-unidade',
 
   NOME_UBS: 'UBS — José Carlos Medani',
@@ -368,12 +370,15 @@ function toast(txt, tipo = 'ok'){
 
 /* ------------------------- Supabase ------------------------- */
 const sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
-let SENHA = lerLocal('ubs-senha', '');
+const CHAVE_LINK = qs.get('chave') || '';
+const SENHA_FIXA = !!CHAVE_LINK;
+let SENHA = CHAVE_LINK || lerLocal('ubs-senha', '');
+if (CHAVE_LINK) gravarLocal('ubs-senha', CHAVE_LINK);
 
 async function api(fn, args = {}){
   const {data, error} = await sb.rpc(fn, {p_senha: SENHA, ...args});
   if (error){
-    if (/senha_invalida/.test(error.message || '')){ gravarLocal('ubs-senha', ''); location.reload(); }
+    if (/senha_invalida/.test(error.message || '') && !SENHA_FIXA){ gravarLocal('ubs-senha', ''); location.reload(); }
     throw error;
   }
   return data;
@@ -423,13 +428,13 @@ async function anunciar(nome, setor, nivel = 'normal'){
 
 /* ------------------------- Início / login ------------------------- */
 function montarRodape(){
-  const base = location.pathname;
-  document.querySelectorAll('.rodape-links').forEach(n => n.replaceChildren(
-    el('a', {href: base + '?modo=recepcao'}, 'Recepção'),
-    el('a', {href: base}, 'Chamada'),
-    el('a', {href: base + '?modo=painel', target:'_blank'}, 'Painel da TV'),
-    el('a', {href:'#', onclick: e => { e.preventDefault(); gravarLocal('ubs-senha',''); location.reload(); }}, 'Sair')
-  ));
+  const base = location.pathname, ch = CHAVE_LINK ? 'chave=' + encodeURIComponent(CHAVE_LINK) : '';
+  document.querySelectorAll('.rodape-links').forEach(n => n.replaceChildren(...[
+    el('a', {href: base + '?modo=recepcao' + (ch ? '&' + ch : '')}, 'Recepção'),
+    el('a', {href: base + (ch ? '?' + ch : '')}, 'Chamada'),
+    el('a', {href: base + '?modo=painel' + (ch ? '&' + ch : ''), target:'_blank'}, 'Painel da TV'),
+    SENHA_FIXA ? null : el('a', {href:'#', onclick: e => { e.preventDefault(); gravarLocal('ubs-senha',''); location.reload(); }}, 'Sair')
+  ].filter(Boolean)));
 }
 
 async function iniciar(){
@@ -437,7 +442,11 @@ async function iniciar(){
   montarRodape();
   if (!SENHA) return mostrarLogin();
   const {error} = await sb.rpc('fila_listar', {p_senha: SENHA});
-  if (error && /senha_invalida/.test(error.message || '')){ gravarLocal('ubs-senha',''); SENHA = ''; return mostrarLogin(); }
+  if (error && /senha_invalida/.test(error.message || '')){
+    gravarLocal('ubs-senha',''); SENHA = ''; mostrarLogin();
+    if (SENHA_FIXA) $('lErro').textContent = 'A chave do link está errada. Corrija o link salvo nos favoritos ou digite a senha aqui.';
+    return;
+  }
   abrirModo();
 }
 

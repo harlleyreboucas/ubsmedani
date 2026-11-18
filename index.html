@@ -702,6 +702,7 @@ function iniciarPainel(){
     await campainha();
     await falar('Painel de chamadas ativado.');
   };
+  if (qs.has('auto')) setTimeout(() => $('btnIniciar').click(), 800);
 }
 
 /* =====================================================================
